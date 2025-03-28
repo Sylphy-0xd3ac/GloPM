@@ -44,8 +44,7 @@ async function startServer() {
     });
   } catch (error) {
     console.error('服务器启动失败:', error);
-    while (true) {
-    }
+    process.exit(1);
   }
 }
 
