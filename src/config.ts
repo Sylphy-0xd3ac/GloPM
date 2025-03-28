@@ -4,7 +4,7 @@
  * MongoDB 数据库连接字符串
  * 例如：'mongodb://localhost:27017/npmdb'
  */
-export const MONGO_URI = 'mongodb://154.12.93.138:27017/npmdb';
+export const MONGO_URI = '';
 
 /**
  * 使用的数据库名称
