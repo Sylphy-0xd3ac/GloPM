@@ -1,7 +1,7 @@
 {
-    "name": "package-registry",
+    "name": "glo-pm-backend",
     "version": "1.0.0",
-    "description": "类NPM包管理系统",
+    "description": "GloPM-Backend",
     "main": "dist/app.js",
     "scripts": {
         "start": "node dist/app.js",
