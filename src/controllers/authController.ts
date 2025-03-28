@@ -1,7 +1,7 @@
 // src/controllers/authController.ts
 import { Context } from 'koa';
 import { Db, ObjectId } from 'mongodb';
-import bcrypt from 'bcrypt';
+import argon2 from 'argon2';
 import crypto from 'node:crypto';
 /**
  * 生成统一 API Key 的示例方法
@@ -40,7 +40,7 @@ export class AuthController {
       }
 
       // 生成密码哈希和 API Key
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await argon2.hash(password);
       const apiKey = generateApiKey();
 
       // 写入数据库
@@ -82,7 +82,7 @@ export class AuthController {
         return;
       }
 
-      const validPassword = await bcrypt.compare(password, user.password);
+      const validPassword = await argon2.verify(user.password, password);
       if (!validPassword) {
         ctx.status = 401;
         ctx.body = { error: '密码错误' };
