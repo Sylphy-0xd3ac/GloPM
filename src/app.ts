@@ -2,7 +2,7 @@ import Koa from 'koa';
 import { koaBody } from 'koa-body';
 import helmet from 'koa-helmet';
 import logger from 'koa-morgan';
-import { connectToMongoDB } from './utils/database';
+import { connectToMongoDB } from './utils/mongoDB';
 import { authRoutes } from './routes/authRoutes';
 import { packageRoutes } from './routes/packageRoutes';
 import { PORT } from './config';
