@@ -4,12 +4,12 @@
  * MongoDB 数据库连接字符串
  * 例如：'mongodb://localhost:27017/npmdb'
  */
-export const MONGO_URI = '';
+export const MONGO_URI = 'mongodb://localhost:27017/glo-pm-backend';
 
 /**
  * 使用的数据库名称
  */
-export const DB_NAME = 'npmdb';
+export const DB_NAME = 'glo-pm-backend';
 
 /**
  * 服务监听的端口
