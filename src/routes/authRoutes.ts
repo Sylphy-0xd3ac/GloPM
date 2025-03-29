@@ -1,5 +1,5 @@
 // src/routes/authRoutes.ts
-import Router from 'koa-router';
+import Router from '@koa/router';
 import { AuthController } from '../controllers/authController';
 import { Db } from 'mongodb';
 import { authenticate } from '../middlewares/auth';

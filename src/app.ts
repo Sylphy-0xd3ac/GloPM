@@ -6,6 +6,7 @@ import { connectToMongoDB } from './utils/mongoDB';
 import { authRoutes } from './routes/authRoutes';
 import { packageRoutes } from './routes/packageRoutes';
 import { PORT } from './config';
+import Router from '@koa/router';
 
 const app = new Koa();
 
@@ -31,7 +32,11 @@ async function startServer() {
   try {
     // 连接到 MongoDB
     const db = await connectToMongoDB();
-    
+
+    app.use(new Router().get('/', async (ctx) => {
+      ctx.body = 'GloPM Backend are running!';
+    }).routes());
+
     // 加载路由
     const authRouter = authRoutes(db);
     const packageRouter = packageRoutes(db);

@@ -1,6 +1,6 @@
 // src/routes/packageRoutes.ts
-import Router from 'koa-router';
-import multer from 'koa-multer';
+import Router from '@koa/router';
+import multer from '@koa/multer';
 import { PackageController } from '../controllers/packageController';
 import { authenticate } from '../middlewares/auth';
 import { Db } from 'mongodb';
