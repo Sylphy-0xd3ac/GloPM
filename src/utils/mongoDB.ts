@@ -1,7 +1,7 @@
 // src/utils/mongoDB.ts
 // 建立 MongoDB 连接后再启动服务器
 import { MongoClient, Db } from 'mongodb';
-import { MONGO_URI, DB_NAME, ACCOUNT, PASSWORD } from '../config';
+import { MONGO_CONNECTION_STRING, DB_NAME } from '../config';
 
 // 单例模式保存 MongoDB 连接
 let client: MongoClient | null = null;
@@ -16,7 +16,7 @@ export async function connectToMongoDB(): Promise<Db> {
     return database;
   }
 
-  if (!MONGO_URI) {
+  if (!MONGO_CONNECTION_STRING) {
     while (true) {
       setTimeout(() => {
         console.log('MONGO_URI 未配置');
@@ -26,9 +26,7 @@ export async function connectToMongoDB(): Promise<Db> {
 
   try {
     client = await MongoClient.connect(
-      ACCOUNT && PASSWORD
-        ? `mongodb://${ACCOUNT}:${PASSWORD}@${MONGO_URI}`
-        : MONGO_URI,
+      MONGO_CONNECTION_STRING,
       { useUnifiedTopology: true } as any
     );
     
