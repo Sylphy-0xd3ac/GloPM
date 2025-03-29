@@ -16,6 +16,14 @@ export async function connectToMongoDB(): Promise<Db> {
     return database;
   }
 
+  if (!MONGO_URI) {
+    while (true) {
+      setTimeout(() => {
+        console.log('MONGO_URI 未配置');
+      }, 1000);
+    }
+  }
+
   try {
     client = await MongoClient.connect(
       ACCOUNT && PASSWORD
