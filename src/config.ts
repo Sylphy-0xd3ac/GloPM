@@ -19,5 +19,5 @@ export const PORT = process.env.PORT;
 /**
  * 账户密码(如有)
  */
-export const ACCOUNT = process.env.ACCOUNT ? process.env.ACCOUNT : null;
+export const ACCOUNT = process.env.MONGO_USERNAME ? process.env.USERNAME : null;
 export const PASSWORD = process.env.PASSWORD ? process.env.PASSWORD : null;
