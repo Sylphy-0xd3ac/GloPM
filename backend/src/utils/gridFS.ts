@@ -35,7 +35,7 @@ export function saveFileToGridFS(
 }
 
 /**
- * 从 GridFS 根据文件 ID 获取流
+ * 根据文件 ID 获取从 GridFS 的流
  * @param bucket GridFSBucket 实例
  * @param fileId 字符串形式的 ObjectID
  */

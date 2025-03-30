@@ -18,18 +18,13 @@ export async function connectToMongoDB(): Promise<Db> {
 
   if (!MONGO_CONNECTION_STRING) {
     while (true) {
-      setTimeout(() => {
-        console.log('MONGO_URI 未配置');
-      }, 1000);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('MONGO_CONNECTION_STRING 未配置');
     }
   }
 
   try {
-    client = await MongoClient.connect(
-      MONGO_CONNECTION_STRING,
-      { useUnifiedTopology: true } as any
-    );
-    
+    client = await MongoClient.connect(MONGO_CONNECTION_STRING);
     database = client.db(DB_NAME);
     console.log('MongoDB 连接成功');
     return database;
