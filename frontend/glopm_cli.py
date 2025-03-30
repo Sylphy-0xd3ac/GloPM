@@ -445,10 +445,40 @@ def publish(args):
 
 def download(args):
     """下载包"""
-    url = f"{get_api_url()}/packages/{args.name}/download/{args.version}"
+    pkg_spec = args.package
+    
+    # 解析包规格
+    # 格式: 包名[@版本][:输出文件名]
+    output_file = None
+    version = 'latest'
+    
+    # 首先检查是否包含输出文件名
+    if ":" in pkg_spec:
+        pkg_part, output_file = pkg_spec.split(":", 1)
+    else:
+        pkg_part = pkg_spec
+    
+    # 然后检查是否包含版本号
+    if "@" in pkg_part:
+        package_name, version = pkg_part.split("@", 1)
+    else:
+        package_name = pkg_part
+    
+    # 如果版本未指定，获取最新版本
+    if version.lower() == 'latest':
+        success, version_info = get_package_latest_version(package_name)
+        if success and 'version' in version_info:
+            version = version_info['version']
+            console.print(f"[blue]获取到 {package_name} 的最新版本: {version}[/blue]")
+        else:
+            error_msg = version_info if not success else "未找到版本信息"
+            print_error(f"获取最新版本失败: {error_msg}")
+            return False
+    
+    url = f"{get_api_url()}/packages/{package_name}/download/{version}"
     
     with Progress() as progress:
-        task = progress.add_task(f"[green]下载 {args.name}@{args.version}...", total=100)
+        task = progress.add_task(f"[green]下载 {package_name}@{version}...", total=100)
         
         def update_progress(downloaded, total):
             if total > 0:
@@ -456,15 +486,15 @@ def download(args):
         
         success, result = download_file(
             url, 
-            args.output, 
+            output_file, 
             progress_callback=update_progress
         )
         
         if success:
             file_size_kb = os.path.getsize(result) / 1024
-            print_success(f"包 {args.name}@{args.version} 下载成功！\n\n"
-                         f"• 包名：{args.name}\n"
-                         f"• 版本：{args.version}\n"
+            print_success(f"包 {package_name}@{version} 下载成功！\n\n"
+                         f"• 包名：{package_name}\n"
+                         f"• 版本：{version}\n"
                          f"• 保存位置：{result}\n"
                          f"• 文件大小：{file_size_kb:.2f} KB")
             return True
@@ -513,151 +543,87 @@ def search(args):
     
     return handle_response(response, success_handler, error_handler)
 
-def get_latest_version(args):
-    """获取包的最新版本"""
-    # 尝试从缓存获取
-    cached_info = get_cached_package_info(args.name)
-    if cached_info and 'latest_version' in cached_info:
-        version_info = cached_info['latest_version']
-        
-        # 使用 tabulate 格式化表格
-        headers = ["版本", "描述", "文件大小", "发布时间"]
-        table_data = [[
-            version_info.get('version', 'N/A'),
-            version_info.get('description', 'N/A'),
-            f"{version_info.get('fileSize', 0) / 1024:.2f} KB",
-            format_date(version_info.get('publishedAt', 'N/A'))
-        ]]
-        
-        table = tabulate(
-            table_data,
-            headers=headers,
-            tablefmt="fancy_grid"
-        )
-        
-        print_info(f"包 {args.name} 的最新版本信息 (缓存)：\n\n{table}", title="版本信息")
-        return True
+def get_package_latest_version(package_name, use_cache=True):
+    """
+    获取包的最新版本信息
     
-    # 缓存未命中，从服务器获取
+    参数:
+        package_name: 包名
+        use_cache: 是否使用缓存
+    
+    返回:
+        (bool, dict|str): (是否成功, 版本信息或错误消息)
+    """
+    # 检查缓存
+    if use_cache:
+        cached_info = get_cached_package_info(package_name)
+        if cached_info and 'latest_version' in cached_info:
+            return True, cached_info['latest_version']
+    
+    # 从服务器获取
     response = api_request(
         'get',
-        f"packages/{args.name}/latestVersion",
-        status_message=f"[bold green]正在获取 {args.name} 的最新版本信息，请稍候...[/bold green]"
+        f"packages/{package_name}/latestVersion",
+        status_message=f"[bold green]正在获取 {package_name} 的最新版本信息...[/bold green]"
     )
     
-    def success_handler(resp):
-        version_info = resp.json()
+    if response.status_code == 200:
+        version_info = response.json()
         
-        if 'message' in version_info and version_info['message'] == '暂无版本':
-            print_info(f"包 {args.name} 暂无版本信息。", title="版本信息")
-            return True
+        # 更新缓存
+        if use_cache:
+            cached_info = get_cached_package_info(package_name) or {}
+            cached_info['latest_version'] = version_info
+            cache_package_info(package_name, cached_info)
         
-        # 缓存版本信息
-        cache_package_info(args.name, {'latest_version': version_info})
-        
-        # 使用 tabulate 格式化表格
-        headers = ["版本", "描述", "文件大小", "发布时间"]
-        table_data = [[
-            version_info.get('version', 'N/A'),
-            version_info.get('description', 'N/A'),
-            f"{version_info.get('fileSize', 0) / 1024:.2f} KB",
-            format_date(version_info.get('publishedAt', 'N/A'))
-        ]]
-        
-        table = tabulate(
-            table_data,
-            headers=headers,
-            tablefmt="fancy_grid"
-        )
-        
-        print_info(f"包 {args.name} 的最新版本信息：\n\n{table}", title="版本信息")
-        return True
-    
-    def error_handler(error):
-        print_error(f"获取失败：{error}。\n请检查包名是否正确。")
-        return False
-    
-    return handle_response(response, success_handler, error_handler)
+        return True, version_info
+    else:
+        try:
+            error = response.json().get('error', '未知错误')
+        except:
+            error = f"状态码: {response.status_code}"
+        return False, error
 
-def list_versions(args):
-    """列出包的所有版本"""
-    # 尝试从缓存获取
-    cached_info = get_cached_package_info(args.name)
-    if cached_info and 'versions' in cached_info:
-        versions = cached_info['versions']
-        
-        if not versions:
-            print_info(f"包 {args.name} 暂无版本记录。", title="版本列表")
-            return True
-        
-        # 使用 tabulate 格式化表格
-        headers = ["版本", "描述", "文件大小", "发布时间"]
-        table_data = []
-
-        print(versions)
-        
-        for ver in versions:
-            table_data.append([
-                ver.get('version', 'N/A'),
-                ver.get('description', 'N/A'),
-                f"{ver.get('fileSize', 0) / 1024:.2f} KB",
-                format_date(ver.get('publishedAt', 'N/A')),
-            ])
-        
-        table = tabulate(
-            table_data,
-            headers=headers,
-            tablefmt="fancy_grid",
-            numalign="right"
-        )
-        
-        print_info(f"包 {args.name} 共有 {len(versions)} 个版本 (缓存)：\n\n{table}", title="版本列表")
-        return True
+def get_package_versions(package_name, use_cache=True):
+    """
+    获取包的所有版本信息
     
-    # 缓存未命中，从服务器获取
+    参数:
+        package_name: 包名
+        use_cache: 是否使用缓存
+    
+    返回:
+        (bool, list|str): (是否成功, 版本列表或错误消息)
+    """
+    # 检查缓存
+    if use_cache:
+        cached_info = get_cached_package_info(package_name)
+        if cached_info and 'versions' in cached_info:
+            return True, cached_info['versions']
+    
+    # 从服务器获取
     response = api_request(
         'get',
-        f"packages/{args.name}/versions",
-        status_message=f"[bold green]正在获取 {args.name} 的版本列表，请稍候...[/bold green]"
+        f"packages/{package_name}/versions",
+        status_message=f"[bold green]正在获取 {package_name} 的版本列表，请稍候...[/bold green]"
     )
     
-    def success_handler(resp):
-        versions = resp.json()
+    if response.status_code == 200:
+        versions = response.json()
         
-        # 缓存版本信息
-        cache_package_info(args.name, {'versions': versions})
+        # 更新缓存
+        if use_cache:
+            cached_info = get_cached_package_info(package_name) or {}
+            cached_info['versions'] = versions
+            cache_package_info(package_name, cached_info)
         
-        if not versions:
-            print_info(f"包 {args.name} 暂无版本记录。", title="版本列表")
-            return True
-        
-        # 使用 tabulate 格式化表格
-        headers = ["版本", "描述", "文件大小", "发布时间"]
-        table_data = []
-        
-        for ver in versions:
-            table_data.append([
-                ver.get('version', 'N/A'),
-                ver.get('description', 'N/A'),
-                f"{ver.get('fileSize', 0) / 1024:.2f} KB",
-                format_date(ver.get('publishedAt', 'N/A')),
-            ])
-        
-        table = tabulate(
-            table_data,
-            headers=headers,
-            tablefmt="fancy_grid",
-            numalign="right"
-        )
-        
-        print_info(f"包 {args.name} 共有 {len(versions)} 个版本：\n\n{table}", title="版本列表")
-        return True
-    
-    def error_handler(error):
-        print_error(f"获取失败：{error}。\n请检查包名是否正确。")
-        return False
-    
-    return handle_response(response, success_handler, error_handler)
+        return True, versions
+    else:
+        try:
+            error = response.json().get('error', '未知错误')
+        except:
+            error = f"状态码: {response.status_code}"
+        return False, error
 
 def batch_download(args):
     """批量下载包"""
@@ -667,25 +633,27 @@ def batch_download(args):
     
     packages = []
     for pkg_spec in args.packages:
-        parts = pkg_spec.split('@')
+        # 检查是否包含输出文件名规范
+        if ":" in pkg_spec:
+            pkg_part, output_file = pkg_spec.split(":", 1)
+        else:
+            pkg_part, output_file = pkg_spec, None
+        
+        # 解析包名和版本
+        parts = pkg_part.split('@')
         if len(parts) == 2:
-            packages.append({'name': parts[0], 'version': parts[1]})
+            packages.append({'name': parts[0], 'version': parts[1], 'output': output_file})
         else:
             # 如果没有指定版本，获取最新版本
-            response = api_request(
-                'get',
-                f"packages/{parts[0]}/latestVersion",
-                status_message=f"[bold green]正在获取 {parts[0]} 的最新版本信息...[/bold green]"
-            )
+            success, version_info = get_package_latest_version(parts[0])
             
-            if response.status_code == 200:
-                version_info = response.json()
+            if success:
                 if 'version' in version_info:
-                    packages.append({'name': parts[0], 'version': version_info['version']})
+                    packages.append({'name': parts[0], 'version': version_info['version'], 'output': output_file})
                 else:
                     print_error(f"包 {parts[0]} 暂无版本，跳过下载。")
             else:
-                print_error(f"获取包 {parts[0]} 的版本信息失败，跳过下载。")
+                print_error(f"获取包 {parts[0]} 的版本信息失败: {version_info}，跳过下载。")
     
     if not packages:
         print_error("没有有效的包可下载。")
@@ -696,17 +664,35 @@ def batch_download(args):
     def download_single(pkg):
         pkg_name = pkg['name']
         pkg_version = pkg['version']
-        url = f"{get_api_url()}/packages/{pkg_name}/download/{pkg_version}"
         
-        console.print(f"[bold green]正在下载 {pkg_name}@{pkg_version}...[/bold green]")
-        success, result = download_file(url, f"{pkg_name}-{pkg_version}.pkg")
+        # 确定输出文件名
+        filename = pkg['output']  # 可能为None，由download_file处理
+        
+        # 设置进度条
+        with Progress() as progress:
+            task = progress.add_task(f"[green]下载 {pkg_name}@{pkg_version}...", total=100)
+            
+            def update_progress(downloaded, total):
+                if total > 0:
+                    progress.update(task, completed=int(downloaded * 100 / total))
+            
+            url = f"{get_api_url()}/packages/{pkg_name}/download/{pkg_version}"
+            success, result = download_file(
+                url, 
+                filename, 
+                progress_callback=update_progress
+            )
         
         if success:
             file_size_kb = os.path.getsize(result) / 1024
-            console.print(f"[green]✓ {pkg_name}@{pkg_version} 下载成功 ({file_size_kb:.2f} KB)[/green]")
+            print_success(f"包 {pkg_name}@{pkg_version} 下载成功！\n\n"
+                         f"• 包名：{pkg_name}\n"
+                         f"• 版本：{pkg_version}\n"
+                         f"• 保存位置：{result}\n"
+                         f"• 文件大小：{file_size_kb:.2f} KB")
             return True
         else:
-            console.print(f"[red]✗ {pkg_name}@{pkg_version} 下载失败: {result}[/red]")
+            print_error(f"下载失败：{result}。\n请检查包名和版本是否正确或网络连接。")
             return False
     
     results = batch_operation(packages, download_single, parallel=args.parallel, max_workers=args.workers)
@@ -863,6 +849,67 @@ def delete_account(args):
     
     return handle_response(response, success_handler, error_handler)
 
+def get_latest_version(args):
+    """获取包的最新版本"""
+    success, result = get_package_latest_version(args.name)
+    
+    if success:
+        if not result:
+            print_info(f"包 {args.name} 暂无版本记录。", title="版本信息")
+            return True
+        
+        version = result.get('version', 'N/A')
+        description = result.get('description', 'N/A')
+        file_size = result.get('fileSize', 0) / 1024
+        published_at = format_date(result.get('publishedAt', 'N/A'))
+        downloads = result.get('downloads', 0)
+        
+        print_info(f"包 {args.name} 的最新版本信息：\n\n"
+                  f"• 版本：{version}\n"
+                  f"• 描述：{description}\n"
+                  f"• 文件大小：{file_size:.2f} KB\n"
+                  f"• 发布时间：{published_at}\n"
+                  f"• 下载量：{downloads}", title="版本信息")
+        return True
+    else:
+        print_error(f"获取失败：{result}。\n请检查包名是否正确。")
+        return False
+
+def list_versions(args):
+    """列出包的所有版本"""
+    success, versions = get_package_versions(args.name)
+    
+    if success:
+        if not versions:
+            print_info(f"包 {args.name} 暂无版本记录。", title="版本列表")
+            return True
+        
+        # 使用 tabulate 格式化表格
+        headers = ["版本", "描述", "文件大小", "发布时间", "下载量"]
+        table_data = []
+        
+        for ver in versions:
+            table_data.append([
+                ver.get('version', 'N/A'),
+                ver.get('description', 'N/A'),
+                f"{ver.get('fileSize', 0) / 1024:.2f} KB",
+                format_date(ver.get('publishedAt', 'N/A')),
+                ver.get('downloads', 0)
+            ])
+        
+        table = tabulate(
+            table_data,
+            headers=headers,
+            tablefmt="fancy_grid",
+            numalign="right"
+        )
+        
+        print_info(f"包 {args.name} 共有 {len(versions)} 个版本：\n\n{table}", title="版本列表")
+        return True
+    else:
+        print_error(f"获取失败：{versions}。\n请检查包名是否正确。")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description=f"{APP_NAME} 命令行工具 v{APP_VERSION}")
     subparsers = parser.add_subparsers(dest="command", help="子命令")
@@ -893,14 +940,12 @@ def main():
     
     # 下载包命令
     download_parser = subparsers.add_parser("download", help="下载包")
-    download_parser.add_argument("name", help="包名")
-    download_parser.add_argument("version", help="版本号")
-    download_parser.add_argument("-o", "--output", help="输出文件路径")
+    download_parser.add_argument("package", help="包规格，格式: 包名[@版本][:输出文件名]")
     download_parser.set_defaults(func=download)
     
     # 批量下载命令
     batch_download_parser = subparsers.add_parser("batch-download", help="批量下载包")
-    batch_download_parser.add_argument("packages", nargs="+", help="包规格列表，格式: 包名[@版本]")
+    batch_download_parser.add_argument("packages", nargs="+", help="包规格列表，格式: 包名[@版本][:输出文件名]")
     batch_download_parser.add_argument("-p", "--parallel", action="store_true", help="并行下载")
     batch_download_parser.add_argument("-w", "--workers", type=int, default=4, help="并行下载的工作线程数")
     batch_download_parser.set_defaults(func=batch_download)
