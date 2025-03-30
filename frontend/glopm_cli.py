@@ -24,7 +24,7 @@ console = Console()
 CONFIG_DIR = Path.home() / ".glopm"
 CONFIG_FILE = CONFIG_DIR / "config.ini"
 CACHE_DIR = CONFIG_DIR / "cache"
-DEFAULT_API_URL = "http://127.0.0.1:3000/api"
+DEFAULT_API_URL = "https://glopm-backend.zeabur.app/api"
 
 # 应用信息
 APP_NAME = "GloPM 包管理器"
