@@ -32,7 +32,7 @@ CACHE_DIR = CONFIG_DIR / "cache"
 DEFAULT_API_URL = "https://glopm-backend.zeabur.app/api"
 
 # 应用信息
-APP_NAME = "GloPM 包管理器"
+APP_NAME = "GloPM"
 APP_VERSION = "1.0.0"
 
 def print_welcome():
