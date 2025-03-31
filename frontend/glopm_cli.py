@@ -17,6 +17,11 @@ from tabulate import tabulate
 from datetime import datetime
 import getpass
 from concurrent.futures import ThreadPoolExecutor
+from rich.prompt import Prompt, Confirm
+from rich.layout import Layout
+from rich.console import Console, Group
+from rich.text import Text
+from rich.table import Table
 
 console = Console()
 
@@ -91,7 +96,7 @@ def get_auth_headers():
     config = load_config()
     if 'user_id' not in config['auth'] or 'api_key' not in config['auth']:
         console.print(Panel(
-            "您尚未登录，请先使用 login 命令登录系统。",
+            "您尚未登录，请先使用 login 命令登录。",
             title="需要登录",
             border_style="red"
         ))
@@ -192,13 +197,16 @@ def clear_auth_info():
 
 def confirm_action(message, confirm_value=None):
     """确认操作"""
-    console.print(f"[bold yellow]{message}[/bold yellow]")
+    console.print(Panel(
+        Text(message, style="bold yellow"),
+        title="需要确认",
+        border_style="yellow"
+    ))
+    
     if confirm_value:
-        confirm = input(f"请输入 '{confirm_value}' 以确认: ")
-        return confirm == confirm_value
+        return Prompt.ask(f"请输入 '{confirm_value}' 以确认") == confirm_value
     else:
-        confirm = input("确认操作？(y/N): ").lower()
-        return confirm == 'y'
+        return ask_continue("确认操作？")
 
 def download_file(url, output_path=None, headers=None, progress_callback=None):
     """
@@ -286,22 +294,96 @@ def batch_operation(items, operation_func, parallel=False, max_workers=4):
     
     return results
 
+def interactive_panel_input_form(title, fields, password_fields=None, description=None):
+    """
+    创建表单式交互面板输入（所有输入字段在一个面板内）
+    
+    参数:
+        title: 面板标题
+        fields: 字段列表，每个元素为 (字段名, 提示文本)
+        password_fields: 密码字段名列表
+        description: 面板描述文本
+    
+    返回:
+        dict: 字段名到输入值的映射
+    """
+    console = Console()
+    password_fields = password_fields or []
+    
+    # 创建面板标题
+    panel_title = f"[bold blue]{title}[/bold blue]"
+    
+    # 创建表单表格
+    form_table = Table(show_header=False, box=None, padding=(0, 2))
+    form_table.add_column("Label", style="green")
+    form_table.add_column("Input", style="cyan")
+    
+    # 添加表单字段
+    for _, prompt_text in fields:
+        form_table.add_row(f"{prompt_text}", "")
+    
+    # 创建面板内容
+    content_elements = []
+    if description:
+        content_elements.append(Text(description, style="italic"))
+        content_elements.append(Text(""))  # 空行
+    
+    content_elements.append(Text("请填写以下信息：", style="bold"))
+    content_elements.append(Text(""))  # 空行
+    content_elements.append(form_table)
+    
+    # 显示面板
+    console.print(Panel(
+        Group(*content_elements),
+        title=panel_title,
+        border_style="blue"
+    ))
+    
+    # 收集输入
+    results = {}
+    for field_name, prompt_text in fields:
+        if field_name in password_fields:
+            value = Prompt.ask(f"  [green]{prompt_text}[/green]", password=True)
+        else:
+            value = Prompt.ask(f"  [green]{prompt_text}[/green]")
+        results[field_name] = value
+    
+    # 如果有确认密码字段，验证密码匹配
+    if 'password' in results and 'confirm_password' in results:
+        if results['password'] != results['confirm_password']:
+            console.print("[bold red]错误：两次输入的密码不匹配！[/bold red]")
+            return None
+    
+    return results
+
 def interactive_login():
     """交互式登录"""
-    username = input("用户名: ")
-    password = getpass.getpass("密码: ")
+    fields = [
+        ('username', '用户名'),
+        ('password', '密码')
+    ]
+    
+    inputs = interactive_panel_input_form(
+        "用户登录", 
+        fields, 
+        password_fields=['password'],
+        description="请输入您的账户信息以登录。"
+    )
+    
+    if not inputs:
+        return False
     
     response = api_request(
         'post', 
         'auth/login', 
-        data={'username': username, 'password': password},
+        data={'username': inputs['username'], 'password': inputs['password']},
         status_message="[bold green]正在验证您的身份，请稍候...[/bold green]"
     )
     
     def success_handler(resp):
         result = resp.json()
-        save_auth_info(result['user_id'], result['apiKey'], username)
-        print_success(f"欢迎回来，{username}！\n\n您已成功登录。")
+        save_auth_info(result['user_id'], result['apiKey'], inputs['username'])
+        print_success(f"欢迎回来，{inputs['username']}！\n\n您已成功登录。")
         return True
     
     def error_handler(error):
@@ -312,25 +394,33 @@ def interactive_login():
 
 def interactive_register():
     """交互式注册"""
-    username = input("请设置用户名: ")
-    password = getpass.getpass("请设置密码: ")
-    confirm_password = getpass.getpass("请确认密码: ")
+    fields = [
+        ('username', '请设置用户名'),
+        ('password', '请设置密码'),
+        ('confirm_password', '请确认密码')
+    ]
     
-    if password != confirm_password:
-        print_error("两次输入的密码不一致，请重新注册。")
+    inputs = interactive_panel_input_form(
+        "注册新用户", 
+        fields, 
+        password_fields=['password', 'confirm_password'],
+        description="欢迎使用 GloPM 包管理器！\n请创建您的账户以开始使用。"
+    )
+    
+    if not inputs:
         return False
     
     response = api_request(
         'post', 
         'auth/register', 
-        data={'username': username, 'password': password},
+        data={'username': inputs['username'], 'password': inputs['password']},
         status_message="[bold green]正在为您注册账户，请稍候...[/bold green]"
     )
     
     def success_handler(resp):
         result = resp.json()
-        save_auth_info(result['user_id'], result['apiKey'], username)
-        print_success(f"尊敬的 {username}，欢迎您使用 {APP_NAME}！\n\n"
+        save_auth_info(result['user_id'], result['apiKey'], inputs['username'])
+        print_success(f"尊敬的 {inputs['username']}，欢迎您使用 {APP_NAME}！\n\n"
                      f"• 您的账户已成功创建。\n"
                      f"• 已为您自动登录。\n"
                      f"• 您现在可以开始发布和下载包了。")
@@ -400,6 +490,9 @@ def logout(args):
 
 def publish(args):
     """发布包"""
+    if not args.name or not args.version or not args.description or not args.file:
+        return interactive_publish()
+    
     headers = get_auth_headers()
     
     # 检查文件是否存在
@@ -775,45 +868,86 @@ def batch_delete_packages(args):
 
 def config_cmd(args):
     """配置管理"""
-    config = load_config()
-    
     if args.show:
-        # 显示当前配置
-        headers = ["配置项", "值"]
-        table_data = [
-            ["API URL", config['settings']['api_url']]
-        ]
+        config = load_config()
         
+        # 使用表格显示配置信息
+        table = Table(title="当前配置", box=True)
+        table.add_column("配置项", style="cyan")
+        table.add_column("值", style="green")
+        
+        # API URL
+        table.add_row("API URL", config['settings'].get('api_url', DEFAULT_API_URL))
+        
+        # 用户信息
         if 'user_id' in config['auth']:
-            table_data.append(["用户 ID", config['auth']['user_id']])
-            table_data.append(["API Key", config['auth']['api_key'][:6] + "..." if config['auth']['api_key'] else "未设置"])
-            table_data.append(["用户名", config['user_info'].get('username', '未知')])
+            table.add_row("用户ID", config['auth'].get('user_id', 'N/A'))
+            table.add_row("用户名", config['user_info'].get('username', 'N/A'))
+            table.add_row("登录状态", "[green]已登录[/green]")
         else:
-            table_data.append(["用户 ID", "未登录"])
-            table_data.append(["API Key", "未登录"])
-            table_data.append(["用户名", "未登录"])
+            table.add_row("登录状态", "[red]未登录[/red]")
         
-        table = tabulate(
-            table_data,
-            headers=headers,
-            tablefmt="fancy_grid"
-        )
+        # 缓存信息
+        if os.path.exists(CACHE_DIR):
+            cache_files = list(CACHE_DIR.glob('*.json'))
+            cache_size = sum(os.path.getsize(f) for f in cache_files) / 1024
+            table.add_row("缓存文件数", str(len(cache_files)))
+            table.add_row("缓存大小", f"{cache_size:.2f} KB")
+        else:
+            table.add_row("缓存状态", "未创建")
         
-        print_info(f"当前配置信息：\n\n{table}", title="配置详情")
+        console.print(table)
+        return True
+    
     elif args.set_api:
-        # 设置 API URL
+        config = load_config()
+        old_url = config['settings'].get('api_url', DEFAULT_API_URL)
         config['settings']['api_url'] = args.set_api
         save_config(config)
-        print_success(f"API URL 已成功设置为：{args.set_api}")
+        print_success(f"API URL 已更新：\n\n旧 URL: {old_url}\n新 URL: {args.set_api}")
+        return True
+    
     elif args.clear_cache:
-        # 清除缓存
         if os.path.exists(CACHE_DIR):
-            import shutil
-            shutil.rmtree(CACHE_DIR)
-            ensure_path_exists(CACHE_DIR)
-            print_success("缓存已成功清除。")
+            cache_files = list(CACHE_DIR.glob('*.json'))
+            for f in cache_files:
+                os.remove(f)
+            print_success(f"已清除 {len(cache_files)} 个缓存文件。")
         else:
-            print_info("缓存目录不存在，无需清除。")
+            print_info("缓存目录不存在，无需清理。")
+        return True
+    
+    else:
+        # 交互式配置
+        fields = [
+            ('api_url', 'API URL')
+        ]
+        
+        config = load_config()
+        current_api = config['settings'].get('api_url', DEFAULT_API_URL)
+        
+        description = f"当前 API URL: {current_api}\n\n如需修改，请输入新的 URL，否则保持不变。"
+        
+        inputs = interactive_panel_input_form("配置管理", fields, description=description)
+        if not inputs:
+            return False
+        
+        if inputs['api_url'] and inputs['api_url'] != current_api:
+            config['settings']['api_url'] = inputs['api_url']
+            save_config(config)
+            print_success(f"API URL 已更新：\n\n旧 URL: {current_api}\n新 URL: {inputs['api_url']}")
+        
+        # 询问是否清除缓存
+        if ask_continue_interactive("是否清除缓存？"):
+            if os.path.exists(CACHE_DIR):
+                cache_files = list(CACHE_DIR.glob('*.json'))
+                for f in cache_files:
+                    os.remove(f)
+                print_success(f"已清除 {len(cache_files)} 个缓存文件。")
+            else:
+                print_info("缓存目录不存在，无需清理。")
+        
+        return True
 
 def delete_account(args):
     """删除用户账户"""
@@ -821,10 +955,34 @@ def delete_account(args):
     config = load_config()
     username = config['user_info'].get('username', '用户')
     
-    # 确认删除
+    # 创建布局
+    layout = Layout()
+    layout.split_column(
+        Layout(name="warning"),
+        Layout(name="info")
+    )
+    
+    # 添加警告内容
+    layout["warning"].update(Panel(
+        Text("您即将删除您的账户，此操作不可逆！\n所有您发布的包将无法再被管理。", style="bold red"),
+        title="⚠️ 警告",
+        border_style="red"
+    ))
+    
+    # 添加账户信息
+    layout["info"].update(Panel(
+        Group(
+            Text(f"用户名: {username}", style="blue"),
+            Text(f"用户ID: {config['auth'].get('user_id', 'N/A')}", style="blue")
+        ),
+        title="账户信息",
+        border_style="blue"
+    ))
+    
+    # 显示布局
     if not args.force:
-        console.print(f"[bold red]警告：您即将删除您的账户，此操作不可逆！所有您发布的包将无法再被管理。[/bold red]")
-        confirm = input("请输入您的用户名以确认删除账户: ")
+        console.print(layout)
+        confirm = Prompt.ask("请输入您的用户名以确认删除账户")
         
         if confirm != username:
             print_info("用户名不匹配，已取消删除操作。", title="操作取消")
@@ -910,6 +1068,97 @@ def list_versions(args):
         print_error(f"获取失败：{versions}。\n请检查包名是否正确。")
         return False
 
+def ask_continue(message="是否继续？", default=True):
+    """
+    询问用户是否继续
+    
+    参数:
+        message: 提示消息
+        default: 默认选择，True 表示默认继续，False 表示默认取消
+    
+    返回:
+        bool: 用户是否选择继续
+    """
+    # 尝试使用交互式版本
+    try:
+        return ask_continue_interactive(message, default)
+    except Exception:
+        # 如果交互式版本失败，回退到简单版本
+        default_str = "Y/n" if default else "y/N"
+        
+        console.print(f"[yellow]{message} [{default_str}][/yellow]")
+        
+        try:
+            response = input().strip().lower()
+            if not response:
+                return default
+            return response in ['y', 'yes', '是', '确定', '继续']
+        except KeyboardInterrupt:
+            console.print("\n[bold yellow]操作已取消。[/bold yellow]")
+            return False
+
+def ask_continue_interactive(message="是否继续？", default=True):
+    """
+    交互式询问用户是否继续，支持键盘左右键选择
+    
+    参数:
+        message: 提示消息
+        default: 默认选择，True 表示默认继续，False 表示默认取消
+    
+    返回:
+        bool: 用户是否选择继续
+    """
+    try:
+        import readchar
+    except ImportError:
+        # 如果没有安装 readchar，回退到简单版本
+        return ask_continue(message, default)
+    
+    options = ["是", "否"]
+    selected = 0 if default else 1
+    
+    # ANSI 转义序列
+    CLEAR_LINE = '\r\033[K'  # 清除当前行
+    GREEN = '\033[32m'       # 绿色
+    DIM = '\033[2m'          # 暗淡
+    BOLD = '\033[1m'         # 加粗
+    YELLOW = '\033[33m'      # 黄色
+    RESET = '\033[0m'        # 重置所有属性
+    
+    def render_options():
+        option_text = ""
+        for i, option in enumerate(options):
+            if i == selected:
+                option_text += f"{BOLD}{GREEN}[{option}]{RESET}"
+            else:
+                option_text += f"{DIM}[{option}]{RESET}"
+            if i < len(options) - 1:
+                option_text += " / "
+        return option_text
+    
+    # 首次打印提示
+    print(f"{YELLOW}{message}{RESET} {render_options()}", end="", flush=True)
+    
+    while True:
+        # 获取按键
+        key = readchar.readkey()
+        
+        # 处理按键
+        if key == readchar.key.LEFT and selected > 0:
+            selected -= 1
+            # 清除当前行并重新打印
+            print(f"{CLEAR_LINE}{YELLOW}{message}{RESET} {render_options()}", end="", flush=True)
+        elif key == readchar.key.RIGHT and selected < len(options) - 1:
+            selected += 1
+            # 清除当前行并重新打印
+            print(f"{CLEAR_LINE}{YELLOW}{message}{RESET} {render_options()}", end="", flush=True)
+        elif key == readchar.key.ENTER:
+            print()  # 换行
+            return selected == 0
+        elif key == "\x03":  # Ctrl+C
+            print(f"\n{YELLOW}操作已取消。{RESET}")
+            return False
+
 def main():
     parser = argparse.ArgumentParser(description=f"{APP_NAME} 命令行工具 v{APP_VERSION}")
     subparsers = parser.add_subparsers(dest="command", help="子命令")
@@ -993,6 +1242,7 @@ def main():
     args = parser.parse_args()
     
     if not args.command:
+        # 如果没有指定命令，显示帮助信息
         print_welcome()
         parser.print_help()
         return
@@ -1003,6 +1253,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        console.print("\n[bold yellow]操作已取消，感谢您的使用！[/bold yellow]")
+        console.print("\n[bold yellow]操作已取消。[/bold yellow]")
         sys.exit(0)
 
