@@ -1,7 +1,6 @@
 // src/controllers/packageController.ts
 import { Context } from 'hono';
 import { Db, ObjectId, GridFSBucket } from 'mongodb';
-import crypto from 'node:crypto';
 import { saveFileToGridFS } from '../utils/gridFS';
 
 export class PackageController {
@@ -93,6 +92,7 @@ export class PackageController {
         filename: fileName,
         publishedBy: userId,
         publishedAt: new Date(),
+        downloads: 0
       });
 
       return c.json({ message: '包发布成功', versionId: versionResult.insertedId });
@@ -152,6 +152,9 @@ export class PackageController {
       const fileId = new ObjectId(versionInfo.filePath as string);
       const downloadStream = this.gridFSBucket.openDownloadStream(fileId);
       
+      // 增加downloads
+      await this.db.collection('versions').updateOne({ _id: versionInfo._id }, { $inc: { downloads: 1 } });
+
       // 将流转换为 Buffer
       const chunks: Buffer[] = [];
       for await (const chunk of downloadStream) {

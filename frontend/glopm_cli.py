@@ -22,6 +22,7 @@ from rich.layout import Layout
 from rich.console import Console, Group
 from rich.text import Text
 from rich.table import Table
+from rich.box import ROUNDED
 
 console = Console()
 
@@ -221,38 +222,57 @@ def download_file(url, output_path=None, headers=None, progress_callback=None):
     返回:
         (bool, str): (是否成功, 文件路径或错误信息)
     """
-    try:
-        with requests.get(url, headers=headers, stream=True) as response:
-            if response.status_code != 200:
-                return False, f"下载失败，状态码: {response.status_code}"
-            
+    response = api_request(
+        'get',
+        url,
+        headers=headers,
+        stream=True,
+        status_message="[bold green]正在准备下载...[/bold green]"
+    )
+    
+    def success_handler(resp):
+        try:
             # 获取文件名
             if not output_path:
-                content_disposition = response.headers.get('content-disposition', '')
+                content_disposition = resp.headers.get('content-disposition', '')
                 if 'filename=' in content_disposition:
-                    output_path = content_disposition.split('filename=')[1].strip('"\'')
+                    filename = content_disposition.split('filename=')[1].strip('"\'')
                 else:
-                    output_path = f"download_{int(datetime.now().timestamp())}"
+                    filename = f"download_{int(datetime.now().timestamp())}"
+                output_file = filename
+            else:
+                output_file = output_path
             
             # 确保输出目录存在
-            ensure_path_exists(os.path.dirname(output_path) or '.')
+            ensure_path_exists(os.path.dirname(output_file) or '.')
             
             # 获取文件大小
-            total_size = int(response.headers.get('content-length', 0))
+            total_size = int(resp.headers.get('content-length', 0))
             
             # 下载文件
-            with open(output_path, 'wb') as f:
+            with open(output_file, 'wb') as f:
                 downloaded = 0
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in resp.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
                         if progress_callback:
                             progress_callback(downloaded, total_size)
             
-            return True, output_path
-    except Exception as e:
-        return False, str(e)
+            return True, output_file
+            
+        except Exception as e:
+            if os.path.exists(output_file):
+                try:
+                    os.remove(output_file)  # 清理未完成的文件
+                except:
+                    pass
+            return False, str(e)
+    
+    def error_handler(error):
+        return False, f"下载失败：{error}"
+    
+    return handle_response(response, success_handler, error_handler)
 
 def get_cached_package_info(package_name, max_age=3600):
     """获取缓存的包信息，如果缓存过期则返回None"""
@@ -548,8 +568,6 @@ def download(args):
             print_error(f"获取最新版本失败: {error_msg}")
             return False
     
-    url = f"{get_api_url()}/packages/{package_name}/download/{version}"
-    
     with Progress() as progress:
         task = progress.add_task(f"[green]下载 {package_name}@{version}...", total=100)
         
@@ -558,8 +576,9 @@ def download(args):
                 progress.update(task, completed=int(downloaded * 100 / total))
         
         success, result = download_file(
-            url, 
-            output_file, 
+            f"packages/{package_name}/download/{version}",
+            output_file,
+            headers=get_auth_headers(),
             progress_callback=update_progress
         )
         
@@ -572,7 +591,7 @@ def download(args):
                          f"• 文件大小：{file_size_kb:.2f} KB")
             return True
         else:
-            print_error(f"下载失败：{result}。\n请检查包名和版本是否正确或网络连接。")
+            print_error(f"下载失败：{result}")
             return False
 
 def search(args):
@@ -849,76 +868,73 @@ def batch_delete_packages(args):
 def config_cmd(args):
     """配置管理"""
     config = load_config()
+    if not args.show and not args.get and not args.set and not args.delete:
+        print_error("请指定要执行的操作。")
+        return False
     
     if args.show:
-        # 使用表格显示配置信息
-        table = Table(title="当前配置", box=True)
+        table = Table(title="当前配置", box=ROUNDED)
         table.add_column("配置项", style="cyan")
         table.add_column("值", style="green")
         
-        # API URL
-        table.add_row("API URL", config['settings'].get('api_url', DEFAULT_API_URL))
-        
-        # 用户信息
-        if 'user_id' in config['auth']:
-            table.add_row("用户ID", config['auth'].get('user_id', 'N/A'))
-            table.add_row("用户名", config['user_info'].get('username', 'N/A'))
-            table.add_row("登录状态", "[green]已登录[/green]")
-        else:
-            table.add_row("登录状态", "[red]未登录[/red]")
-        
-        # 缓存信息
-        if os.path.exists(CACHE_DIR):
-            cache_files = list(CACHE_DIR.glob('*.json'))
-            cache_size = sum(os.path.getsize(f) for f in cache_files) / 1024
-            table.add_row("缓存文件数", str(len(cache_files)))
-            table.add_row("缓存大小", f"{cache_size:.2f} KB")
-        else:
-            table.add_row("缓存状态", "未创建")
+        for section in config.sections():
+            for key, value in config[section].items():
+                if key == 'api_key':
+                    value = '******'
+                table.add_row(f"{section}.{key}", value)
         
         console.print(table)
         return True
     
-    elif args.set_api:
-        old_url = config['settings'].get('api_url', DEFAULT_API_URL)
-        config['settings']['api_url'] = args.set_api
-        save_config(config)
-        print_success(f"API URL 已更新：\n\n旧 URL: {old_url}\n新 URL: {args.set_api}")
-        return True
-    
-    elif args.clear_cache:
-        if os.path.exists(CACHE_DIR):
-            cache_files = list(CACHE_DIR.glob('*.json'))
-            for f in cache_files:
-                os.remove(f)
-            print_success(f"已清除 {len(cache_files)} 个缓存文件。")
+    elif args.get:
+        section, key = args.get.split('.', 1) if '.' in args.get else ('settings', args.get)
+        if section in config and key in config[section]:
+            value = config[section][key]
+            print_info(f"配置项 {section}.{key} 的值为：{value}")
         else:
-            print_info("缓存目录不存在，无需清理。")
+            print_error(f"配置项 {args.get} 不存在")
         return True
     
-    else:
-        # 交互式配置
-        current_api = config['settings'].get('api_url', DEFAULT_API_URL)
-        print_info(f"当前 API URL: {current_api}\n\n如需修改，请输入新的 URL，否则直接按回车保持不变。", title="配置管理")
+    elif args.set:
+        key, value = args.set.split('=', 1)
+        section, key = key.split('.', 1) if '.' in key else ('settings', key)
         
-        new_api = input("新 API URL: ").strip()
+        if section not in config:
+            config[section] = {}
         
-        if new_api and new_api != current_api:
-            config['settings']['api_url'] = new_api
-            save_config(config)
-            print_success(f"API URL 已更新：\n\n旧 URL: {current_api}\n新 URL: {new_api}")
-        
-        # 询问是否清除缓存
-        if ask_continue("是否清除缓存？"):
-            if os.path.exists(CACHE_DIR):
-                cache_files = list(CACHE_DIR.glob('*.json'))
-                for f in cache_files:
-                    os.remove(f)
-                print_success(f"已清除 {len(cache_files)} 个缓存文件。")
-            else:
-                print_info("缓存目录不存在，无需清理。")
-        
+        config[section][key] = value
+        save_config(config)
+        print_success(f"配置项 {section}.{key} 已更新为：{value}")
         return True
+    
+    elif args.delete:
+        section, key = args.delete.split('.', 1) if '.' in args.delete else ('settings', args.delete)
+        if section in config and key in config[section]:
+            del config[section][key]
+            save_config(config)
+            print_success(f"配置项 {section}.{key} 已删除")
+        else:
+            print_error(f"配置项 {args.delete} 不存在")
+        return True
+
+def clear_cache(args):
+    """清除缓存"""
+    if os.path.exists(CACHE_DIR):
+        cache_files = list(CACHE_DIR.glob('*.json'))
+        if not cache_files:
+            print_info("缓存目录为空，无需清理。")
+            return True
+            
+        if not args.force and not confirm_action(f"确定要清除 {len(cache_files)} 个缓存文件吗？"):
+            print_info("已取消清除缓存操作。", title="操作取消")
+            return True
+            
+        for f in cache_files:
+            os.remove(f)
+        print_success(f"已清除 {len(cache_files)} 个缓存文件。")
+    else:
+        print_info("缓存目录不存在，无需清理。")
+    return True
 
 def delete_account(args):
     """删除用户账户"""
@@ -1200,10 +1216,16 @@ def main():
     
     # 配置命令
     config_parser = subparsers.add_parser("config", help="配置管理")
-    config_parser.add_argument("--show", action="store_true", help="显示当前配置")
-    config_parser.add_argument("--set-api", help="设置 API URL")
-    config_parser.add_argument("--clear-cache", action="store_true", help="清除缓存")
+    config_parser.add_argument("--show", action="store_true", help="显示所有配置")
+    config_parser.add_argument("--get", help="获取配置项值，格式: [section.]key")
+    config_parser.add_argument("--set", help="设置配置项值，格式: [section.]key=value")
+    config_parser.add_argument("--delete", help="删除配置项，格式: [section.]key")
     config_parser.set_defaults(func=config_cmd)
+    
+    # 清除缓存命令
+    clear_cache_parser = subparsers.add_parser("clear-cache", help="清除缓存")
+    clear_cache_parser.add_argument("-f", "--force", action="store_true", help="强制清除，不提示确认")
+    clear_cache_parser.set_defaults(func=clear_cache)
     
     # 删除账户命令
     delete_account_parser = subparsers.add_parser("delete-account", help="删除用户账户")
