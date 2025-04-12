@@ -14,7 +14,7 @@ export class PackageController {
 
   /**
    * 发布包
-   * POST /api/packages/publish
+   * PUT /api/packages/publish
    * 表单字段：packageName, version, description, file（文件对象）
    */
   async publish(c: Context) {
@@ -101,6 +101,34 @@ export class PackageController {
     }
   }
 
+  /** 删除版本
+   * DELETE /api/packages/:packageName/versions/:version
+   */
+  async deleteVersion(c: Context) {
+    try {
+      const userIdHeader = c.req.header('x-user-id');
+      if (!userIdHeader) {
+        return c.json({ error: '未认证' }, 401);
+      }
+      const userId = new ObjectId(userIdHeader);
+
+      const packageName = c.req.param('packageName');
+      const version = c.req.param('version');
+
+      const pkg = await this.db.collection('packages').findOne({ name: packageName });
+      if (!pkg) {
+        return c.json({ error: '包不存在' }, 404);
+      }
+      if (!pkg.owner.equals(userId)) {
+        return c.json({ error: '无权限删除此包' }, 403);
+      }
+      await this.db.collection('versions').deleteOne({ package: pkg._id, version });
+      return c.json({ message: '版本删除成功' });
+    } catch (error: any) {
+      return c.json({ error: error.message }, 500);
+    }
+  }
+
   /**
    * 删除包
    * DELETE /api/packages/:packageName
@@ -122,6 +150,7 @@ export class PackageController {
         return c.json({ error: '无权限删除此包' }, 403);
       }
       await this.db.collection('packages').deleteOne({ _id: pkg._id });
+      await this.db.collection('versions').deleteMany({ package: pkg._id });
       return c.json({ message: '包删除成功' });
     } catch (error: any) {
       return c.json({ error: error.message }, 500);

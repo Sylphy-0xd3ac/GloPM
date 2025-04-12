@@ -9,7 +9,7 @@ export function packageRoutes(db: Db): Hono {
   const packageController = new PackageController(db);
 
   // 发布包 (需要认证)
-  app.post('/publish', authenticate(db), async (c) => {
+  app.put('/publish', authenticate(db), async (c) => {
     return await packageController.publish(c);
   });
 

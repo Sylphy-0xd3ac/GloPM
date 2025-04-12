@@ -77,7 +77,7 @@ x-api-key: <API密钥>
 #### 发布包
 
 - **URL**: `/packages/publish`
-- **方法**: `POST`
+- **方法**: `PUT`
 - **描述**: 发布新包或更新现有包
 - **需要认证**: 是
 - **请求体**:
@@ -219,7 +219,7 @@ curl -X POST https://glopm-backend.zeabur.app/api/auth/register \
 ### 发布包
 
 ```bash
-curl -X POST https://glopm-backend.zeabur.app/api/packages/publish \
+curl -X PUT https://glopm-backend.zeabur.app/api/packages/publish \
   -H "x-user-id: YOUR_USER_ID" \
   -H "x-api-key: YOUR_API_KEY" \
   -F "packageName=my-package" \

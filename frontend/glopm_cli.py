@@ -169,6 +169,9 @@ def api_request(method, endpoint, data=None, files=None, headers=None, stream=Fa
             elif method.lower() == 'post':
                 response = requests.post(url, headers=headers, json=data if files is None else None, 
                                         data=None if files is None else data, files=files)
+            elif method.lower() == 'put':
+                response = requests.put(url, headers=headers, json=data if files is None else None, 
+                                        data=None if files is None else data, files=files)
             elif method.lower() == 'delete':
                 response = requests.delete(url, headers=headers)
             else:
@@ -465,7 +468,7 @@ def interactive_publish():
     }
     
     response = api_request(
-        'post', 
+        'put', 
         'packages', 
         data=data, 
         files=files,
@@ -510,7 +513,7 @@ def publish(args):
     }
     
     response = api_request(
-        'post',
+        'put',
         'packages/publish',
         headers=headers,
         data=data,
@@ -1146,6 +1149,32 @@ def ask_continue_interactive(message="是否继续？", default=True):
             print(f"\n{YELLOW}操作已取消。{RESET}")
             return False
 
+def delete_version(args):
+    """删除包的特定版本"""
+    headers = get_auth_headers()
+    
+    # 确认删除
+    if not args.force and not confirm_action(f"警告：您即将删除包 {args.name} 的版本 {args.version}，此操作不可逆！"):
+        print_info("已取消删除操作。", title="操作取消")
+        return False
+    
+    response = api_request(
+        'delete',
+        f"packages/{args.name}/versions/{args.version}",
+        headers=headers,
+        status_message=f"[bold green]正在删除包 {args.name} 的版本 {args.version}，请稍候...[/bold green]"
+    )
+    
+    def success_handler(resp):
+        print_success(f"包 {args.name} 的版本 {args.version} 已成功删除。")
+        return True
+    
+    def error_handler(error):
+        print_error(f"删除失败：{error}。\n请检查包名和版本是否正确或确认您有权限删除此版本。")
+        return False
+    
+    return handle_response(response, success_handler, error_handler)
+
 def main():
     parser = argparse.ArgumentParser(description=f"{APP_NAME} 命令行工具 v{APP_VERSION}")
     subparsers = parser.add_subparsers(dest="command", help="子命令")
@@ -1231,6 +1260,13 @@ def main():
     delete_account_parser = subparsers.add_parser("delete-account", help="删除用户账户")
     delete_account_parser.add_argument("-f", "--force", action="store_true", help="强制删除，不提示确认")
     delete_account_parser.set_defaults(func=delete_account)
+    
+    # 删除版本命令
+    delete_version_parser = subparsers.add_parser("delete-version", help="删除包的特定版本")
+    delete_version_parser.add_argument("name", help="包名")
+    delete_version_parser.add_argument("version", help="版本号")
+    delete_version_parser.add_argument("-f", "--force", action="store_true", help="强制删除，不提示确认")
+    delete_version_parser.set_defaults(func=delete_version)
     
     args = parser.parse_args()
     
