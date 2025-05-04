@@ -31,15 +31,15 @@ export class AuthController {
       }
 
       const hashedPassword = await argon2.hash(password);
-      const apiKey = generateApiKey();
+      const api_key = generateApiKey();
 
       const result = await this.db.collection('users').insertOne({
         username,
         password: hashedPassword,
-        apiKey
+        api_key
       });
 
-      return c.json({ user_id: result.insertedId, apiKey }, 201);
+      return c.json({ user_id: result.insertedId, api_key: api_key }, 201);
     } catch (error: any) {
       return c.json({ error: error.message }, 500);
     }
