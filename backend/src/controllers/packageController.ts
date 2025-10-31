@@ -52,6 +52,14 @@ export class PackageController {
         if (!pkg.owner.equals(userId)) {
           return c.json({ error: '无权限发布此包' }, 403);
         }
+        await this.db.collection('packages').updateOne(
+          { _id: pkg._id },
+          {
+            description,
+            owner: userId,
+            updatedAt: new Date(),
+          }
+        )
       } else {
         // 插入新包记录
         const result = await this.db.collection('packages').insertOne({
