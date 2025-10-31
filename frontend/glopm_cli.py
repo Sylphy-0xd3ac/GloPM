@@ -469,7 +469,7 @@ def interactive_publish():
     
     response = api_request(
         'put', 
-        'packages', 
+        'packages/publish', 
         data=data, 
         files=files,
         headers=headers,
