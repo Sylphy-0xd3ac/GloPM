@@ -64,7 +64,7 @@ export class AuthController {
       if (!(await argon2.verify(user.password, password))) {
         return c.json({ error: '密码错误' }, 401);
       }
-      return c.json({ user_id: user._id, api_key: user.apiKey });
+      return c.json({ user_id: user._id, api_key: user.api_key });
     } catch (error: any) {
       return c.json({ error: error.message }, 500);
     }
