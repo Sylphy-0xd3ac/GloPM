@@ -1197,10 +1197,10 @@ def main():
     
     # 发布包命令
     publish_parser = subparsers.add_parser("publish", help="发布包")
-    publish_parser.add_argument("name", help="包名")
-    publish_parser.add_argument("version", help="版本号")
-    publish_parser.add_argument("description", help="包描述")
-    publish_parser.add_argument("file", help="包文件路径")
+    publish_parser.add_argument("-n", "--name", help="包名")
+    publish_parser.add_argument("-v", "--version", help="版本号")
+    publish_parser.add_argument("-d", "--description", help="包描述")
+    publish_parser.add_argument(“-f", "--file", help="包文件路径")
     publish_parser.set_defaults(func=publish)
     
     # 下载包命令
