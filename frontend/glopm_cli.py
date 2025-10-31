@@ -771,7 +771,7 @@ def batch_download(args):
                 if total > 0:
                     progress.update(task, completed=int(downloaded * 100 / total))
             
-            url = f"{get_api_url()}/packages/{pkg_name}/download/{pkg_version}"
+            url = f"packages/{pkg_name}/download/{pkg_version}"
             success, result = download_file(
                 url, 
                 filename, 
