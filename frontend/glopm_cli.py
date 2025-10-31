@@ -336,7 +336,7 @@ def interactive_login():
         result = resp.json()
         config = load_config()
         config['auth']['user_id'] = result['user_id']
-        config['auth']['api_key'] = result['api_key']
+        config['auth']['api_key'] = result['apiKey']
         config['user_info']['username'] = username
         save_config(config)
         print_success(f"欢迎回来，{username}！\n您已成功登录。")
