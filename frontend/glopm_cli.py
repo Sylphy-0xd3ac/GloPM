@@ -462,7 +462,7 @@ def interactive_publish():
     # 准备文件
     files = {'file': open(file_path, 'rb')}
     data = {
-        'name': name,
+        'packageName': name,
         'version': version,
         'description': description
     }
