@@ -18,7 +18,7 @@ export function authenticate(db: Db): MiddlewareHandler {
     if (!user) {
       return c.json({ error: '无效的 User' }, 401);
     }
-    if (user.apiKey !== apiKey) {
+    if (user.api_key !== apiKey) {
       return c.json({ error: '错误的 API Key' }, 401);
     }
 
