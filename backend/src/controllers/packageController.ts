@@ -55,9 +55,11 @@ export class PackageController {
         await this.db.collection('packages').updateOne(
           { _id: pkg._id },
           {
-            description,
-            owner: userId,
-            updatedAt: new Date(),
+            $set: {
+              description,
+              owner: userId,
+              updatedAt: new Date(),
+            }
           }
         )
       } else {
