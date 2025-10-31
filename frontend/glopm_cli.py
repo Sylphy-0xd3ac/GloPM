@@ -336,7 +336,7 @@ def interactive_login():
         result = resp.json()
         config = load_config()
         config['auth']['user_id'] = result['user_id']
-        config['auth']['api_key'] = result['apiKey']
+        config['auth']['api_key'] = result['api_key']
         config['user_info']['username'] = username
         save_config(config)
         print_success(f"欢迎回来，{username}！\n您已成功登录。")
@@ -398,7 +398,7 @@ def register(args):
     
     def success_handler(resp):
         result = resp.json()
-        save_auth_info(result['user_id'], result['apiKey'], args.username)
+        save_auth_info(result['user_id'], result['api_key'], args.username)
         print_success(f"尊敬的 {args.username}，欢迎您使用 {APP_NAME}！\n\n"
                      f"• 您的账户已成功创建。\n"
                      f"• 已为您自动登录。\n"
@@ -425,7 +425,7 @@ def login(args):
     
     def success_handler(resp):
         result = resp.json()
-        save_auth_info(result['user_id'], result['apiKey'], args.username)
+        save_auth_info(result['user_id'], result['api_key'], args.username)
         print_success(f"欢迎回来，{args.username}！\n\n您已成功登录。")
         return True
     
